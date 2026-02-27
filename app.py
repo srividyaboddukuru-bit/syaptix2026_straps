@@ -1,172 +1,171 @@
-from flask import Flask, request, render_template_string
+from flask import Flask, request, render_template_string, redirect, url_for
 
 app = Flask(__name__)
 
-# ------------------------------------------------
-# Matching Model
-# ------------------------------------------------
-PROJECT = {
-    "python": 80,
-    "ml": 70,
-    "communication": 65,
-    "problem_solving": 75
-}
-
-WEIGHTS = {
-    "competency": 0.35,
-    "requirement": 0.25,
-    "experience": 0.20,
-    "learning": 0.10,
-    "fairness": 0.10
-}
-
-def fairness_boost(resource):
-    return 100 - resource
-
-
-# ------------------------------------------------
-# Score Calculation (STEP 3)
-# ------------------------------------------------
-def calculate_score(form):
-
-    skills = {
-        "python": int(form["python"]),
-        "ml": int(form["ml"]),
-        "communication": int(form["communication"]),
-        "problem_solving": int(form["problem_solving"])
-    }
-
-    experience = int(form["experience"])
-    learning = int(form["learning"])
-    resource = int(form["resource"])
-
-    reasoning = []
-
-    alignment = sum(min(skills[k], PROJECT[k]) for k in PROJECT)/len(PROJECT)
-    reasoning.append("Competency alignment calculated from submitted skills.")
-
-    gaps = [abs(PROJECT[k]-skills[k]) for k in PROJECT]
-    requirement_fit = 100 - (sum(gaps)/len(gaps))
-    reasoning.append("Requirement mapping based on skill-gap analysis.")
-
-    fairness = fairness_boost(resource)
-    reasoning.append("Fairness-aware adjustment applied.")
-
-    final_score = (
-        alignment*WEIGHTS["competency"]
-        + requirement_fit*WEIGHTS["requirement"]
-        + experience*WEIGHTS["experience"]
-        + learning*WEIGHTS["learning"]
-        + fairness*WEIGHTS["fairness"]
-    )
-
-    reasoning.append(f"✅ Final Match Score = {final_score:.2f}")
-
-    return round(final_score,2), reasoning
-
-
-# ------------------------------------------------
-# WEB APP TEMPLATE
-# ------------------------------------------------
 TEMPLATE = """
 <!DOCTYPE html>
 <html>
 <head>
-<title>Explainable Internship Platform</title>
+<title>Internship Registration</title>
 
 <style>
-
 body{
-margin:0;
-font-family:Segoe UI;
-background:linear-gradient(135deg,#ff9a9e,#ffb347,#ffe066);
-height:100vh;
+font-family:Arial;
+background:linear-gradient(to right,yellow,pink,orange);
 display:flex;
 justify-content:center;
 align-items:center;
-color:#222;
+min-height:100vh;
+margin:0;
 }
 
 .container{
-width:520px;
 background:white;
-padding:30px;
-border-radius:15px;
-box-shadow:0 8px 25px rgba(0,0,0,0.25);
+padding:25px;
+border-radius:12px;
+width:420px;
+box-shadow:0 0 15px rgba(0,0,0,0.25);
 }
 
-h1{text-align:center;color:#ff5e78;}
+h2{text-align:center;color:#222;}
 
 input{
 width:100%;
 padding:10px;
-margin:8px 0;
-border:1px solid #ccc;
+margin:6px 0 12px 0;
 border-radius:6px;
+border:1px solid #ccc;
 }
 
 button{
 width:100%;
 padding:12px;
-border:none;
-border-radius:8px;
-font-weight:bold;
-cursor:pointer;
-margin-top:10px;
+background:black;
 color:white;
-}
-
-.next-btn{background:#ff7f50;}
-.submit-btn{background:#ff5e78;}
-
-.section{display:none;}
-
-.result{
-background:#fff3cd;
-padding:15px;
-border-radius:10px;
-margin-top:15px;
-}
-
-.thankyou{
-text-align:center;
-font-size:22px;
-color:#28a745;
+border:none;
+border-radius:6px;
+cursor:pointer;
 font-weight:bold;
-margin-top:15px;
+margin-top:10px;
 }
 
-.error{
-color:red;
-text-align:center;
-}
+button:hover{background:#333;}
 
+.hidden{display:none;}
+.error{color:red;text-align:center;}
 </style>
+</head>
+
+<body>
+
+<div class="container">
+
+{% if not score %}
+
+<div id="step1">
+<h2>Step 1: Basic Details</h2>
+
+<input id="name" placeholder="Name">
+<input id="email" placeholder="Email">
+<input id="college" placeholder="College">
+<input id="mobile" placeholder="Mobile">
+<input id="skills" placeholder="Skills (Python,Java,HTML)">
+
+<div id="error1" class="error"></div>
+
+<button onclick="goToStep2()">Next</button>
+</div>
+
+<form method="POST" onsubmit="return validateSkills()">
+
+<div id="step2" class="hidden">
+<h2>Step 2: Skill Scores</h2>
+
+<div id="skillInputs"></div>
+
+<input type="hidden" name="skill_names" id="skill_names">
+
+<div id="error2" class="error"></div>
+
+<button>Submit Application</button>
+</div>
+
+</form>
+
+{% endif %}
+
+{% if score %}
+
+<h2>Step 3: Match Score</h2>
+
+<p><b>Your Match Score:</b> {{score}}%</p>
+
+<p><b>Thanks for registering in internship... further details will be mailed to you.</b></p>
+
+<form method="GET">
+<button>Other Response</button>
+</form>
+
+{% endif %}
+
+</div>
 
 <script>
 
-/* STEP CONTROL */
-function goToStep2(){
-let name=document.getElementById("name").value.trim();
-let gmail=document.getElementById("gmail").value.trim();
-let college=document.getElementById("college").value.trim();
+let skillsArray=[];
 
-if(!name || !gmail || !college){
-document.getElementById("error1").innerText =
-"⚠ Fill all basic details first.";
+function goToStep2(){
+
+let name=document.getElementById("name").value.trim();
+let email=document.getElementById("email").value.trim();
+let college=document.getElementById("college").value.trim();
+let mobile=document.getElementById("mobile").value.trim();
+let skills=document.getElementById("skills").value.trim();
+
+if(!name || !email || !college || !mobile || !skills){
+document.getElementById("error1").innerText=
+"Basic details are compulsory.";
 return;
 }
 
-document.getElementById("step1").style.display="none";
-document.getElementById("step2").style.display="block";
+document.getElementById("error1").innerText="";
+
+skillsArray=skills.split(",").map(s=>s.trim());
+
+let div=document.getElementById("skillInputs");
+div.innerHTML="";
+
+skillsArray.forEach(skill=>{
+
+let label=document.createElement("label");
+label.innerText=skill+" Score (0-100)";
+
+let input=document.createElement("input");
+input.type="number";
+input.min="0";
+input.max="100";
+input.name="score_"+skill;
+input.className="skillScore";
+input.placeholder="Enter "+skill+" score";
+
+div.appendChild(label);
+div.appendChild(input);
+});
+
+document.getElementById("skill_names").value=skillsArray.join(",");
+
+document.getElementById("step1").classList.add("hidden");
+document.getElementById("step2").classList.remove("hidden");
 }
 
-/* validate skills before submit */
-function validateStep2(){
-let inputs=document.querySelectorAll("#step2 input");
-for(let i=0;i<inputs.length;i++){
-if(inputs[i].value===""){
-alert("Please complete all skill details.");
+function validateSkills(){
+
+let scores=document.getElementsByClassName("skillScore");
+
+for(let i=0;i<scores.length;i++){
+if(scores[i].value===""){
+document.getElementById("error2").innerText=
+"Skill scores are compulsory.";
 return false;
 }
 }
@@ -175,96 +174,29 @@ return true;
 
 </script>
 
-</head>
-
-<body>
-
-<div class="container">
-
-<h1>🌟 Internship Application</h1>
-
-<form method="POST" onsubmit="return validateStep2()">
-
-<!-- STEP 1 -->
-<div id="step1">
-
-<input id="name" name="name" placeholder="Full Name">
-<input id="gmail" name="gmail" placeholder="Gmail Address">
-<input id="college" name="college" placeholder="College Name">
-
-<div id="error1" class="error"></div>
-
-<button type="button" class="next-btn" onclick="goToStep2()">
-Next → Skills
-</button>
-
-</div>
-
-<!-- STEP 2 -->
-<div id="step2" class="section">
-
-<h3>Skill Assessment (1–100)</h3>
-
-<input name="python" placeholder="Python Skill">
-<input name="ml" placeholder="Machine Learning Skill">
-<input name="communication" placeholder="Communication Skill">
-<input name="problem_solving" placeholder="Problem Solving Skill">
-<input name="experience" placeholder="Experience Level">
-<input name="learning" placeholder="Learning Potential">
-<input name="resource" placeholder="Resource Access Index">
-
-<button class="submit-btn">
-Submit Application
-</button>
-
-</div>
-
-</form>
-
-{% if score %}
-
-<!-- STEP 3 RESULT -->
-<div class="result">
-
-<h2>Match Score: {{score}}</h2>
-
-<ul>
-{% for r in reasoning %}
-<li>{{r}}</li>
-{% endfor %}
-</ul>
-
-<div class="thankyou">
-🎉 Thank you for registering!  
-Your internship application has been submitted successfully.
-</div>
-
-</div>
-
-{% endif %}
-
-</div>
-
 </body>
 </html>
 """
 
+def calculate_score(form):
+    skills_text=form.get("skill_names")
+    if not skills_text:
+        return None
+    skills=skills_text.split(",")
+    total=0
+    for skill in skills:
+        value=form.get(f"score_{skill}")
+        if value is None or value=="":
+            return None
+        total+=int(value)
+    return round(total/len(skills),2)
 
-@app.route("/", methods=["GET","POST"])
+@app.route("/",methods=["GET","POST"])
 def home():
-
     score=None
-    reasoning=None
-
     if request.method=="POST":
-        score, reasoning = calculate_score(request.form)
+        score=calculate_score(request.form)
+    return render_template_string(TEMPLATE,score=score)
 
-    return render_template_string(
-        TEMPLATE,
-        score=score,
-        reasoning=reasoning
-    )
-
-
-if __name__ == "__main__":
+if __name__=="__main__":
     app.run(debug=True)
