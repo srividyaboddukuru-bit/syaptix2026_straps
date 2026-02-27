@@ -1,177 +1,265 @@
-from flask import Flask, request
+from flask import Flask, request, render_template_string
 
 app = Flask(__name__)
 
-@app.route('/')
-def index():
-    return '''
+# -------------------------------------------------
+# Internship Requirement Model
+# -------------------------------------------------
+PROJECT = {
+    "python": 80,
+    "ml": 70,
+    "communication": 65,
+    "problem_solving": 75
+}
+
+WEIGHTS = {
+    "competency": 0.35,
+    "requirement": 0.25,
+    "experience": 0.20,
+    "learning": 0.10,
+    "fairness": 0.10
+}
+
+def fairness_boost(resource):
+    return 100 - resource
+
+
+# -------------------------------------------------
+# Explainable Score Calculation
+# -------------------------------------------------
+def calculate_score(form):
+
+    skills = {
+        "python": int(form["python"]),
+        "ml": int(form["ml"]),
+        "communication": int(form["communication"]),
+        "problem_solving": int(form["problem_solving"])
+    }
+
+    experience = int(form["experience"])
+    learning = int(form["learning"])
+    resource = int(form["resource"])
+
+    reasoning = []
+
+    alignment = sum(min(skills[k], PROJECT[k]) for k in PROJECT)/len(PROJECT)
+    reasoning.append("Skills aligned with internship competency requirements.")
+
+    gaps = [abs(PROJECT[k]-skills[k]) for k in PROJECT]
+    requirement_fit = 100 - (sum(gaps)/len(gaps))
+    reasoning.append("Requirement mapping computed using skill-gap analysis.")
+
+    fairness = fairness_boost(resource)
+    reasoning.append("Fairness-aware adjustment applied.")
+
+    final_score = (
+        alignment*WEIGHTS["competency"] +
+        requirement_fit*WEIGHTS["requirement"] +
+        experience*WEIGHTS["experience"] +
+        learning*WEIGHTS["learning"] +
+        fairness*WEIGHTS["fairness"]
+    )
+
+    reasoning.append(f"✅ Final Match Score = {final_score:.2f}")
+
+    return round(final_score,2), reasoning
+
+
+# -------------------------------------------------
+# WEB APPLICATION UI
+# -------------------------------------------------
+TEMPLATE = """
+<!DOCTYPE html>
 <html>
 <head>
-<title>✨ Internship Form ✨</title>
+<title>Explainable Internship Application</title>
+
 <style>
-/* Full page gradient */
-body {
-    margin: 0;
-    height: 100vh;
-    font-family: 'Arial', sans-serif;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    background: linear-gradient(135deg, #ff6a00, #ee0979);
+
+/* 🌈 VIBGYOR BACKGROUND */
+body{
+margin:0;
+font-family:Segoe UI;
+background:linear-gradient(
+90deg,
+#9400D3,
+#4B0082,
+#0000FF,
+#00FF00,
+#FFFF00,
+#FF7F00,
+#FF0000
+);
+background-size:400% 400%;
+animation:gradientMove 12s ease infinite;
+color:white;
 }
 
-/* Glassmorphism card */
-.card {
-    background: rgba(255,255,255,0.15);
-    backdrop-filter: blur(15px);
-    border-radius: 20px;
-    padding: 40px;
-    width: 380px;
-    box-shadow: 0 8px 32px 0 rgba(0,0,0,0.25);
-    text-align: center;
-    color: white;
-    animation: fadeIn 1s ease;
+@keyframes gradientMove{
+0%{background-position:0% 50%;}
+50%{background-position:100% 50%;}
+100%{background-position:0% 50%;}
 }
 
-/* Floating label style */
-input {
-    width: 100%;
-    padding: 14px 10px;
-    margin: 10px 0 20px 0;
-    border: none;
-    border-bottom: 2px solid white;
-    background: transparent;
-    color: white;
-    font-size: 16px;
-    outline: none;
-    transition: 0.3s;
-}
-input:focus {
-    border-bottom: 2px solid #fff700;
-}
-input::placeholder {
-    color: rgba(255,255,255,0.7);
+.container{
+width:520px;
+margin:40px auto;
+background:rgba(0,0,0,0.45);
+padding:25px;
+border-radius:15px;
+backdrop-filter:blur(12px);
+box-shadow:0 0 25px rgba(0,0,0,0.5);
 }
 
-/* Button style */
-button {
-    padding: 12px;
-    width: 100%;
-    border-radius: 10px;
-    border: none;
-    cursor: pointer;
-    font-size: 16px;
-    color: #ff6a00;
-    background: white;
-    transition: 0.4s;
-}
-button:hover {
-    background: #fff700;
-    color: #ee0979;
+h1{text-align:center;}
+
+input{
+width:100%;
+padding:10px;
+margin:8px 0;
+border:none;
+border-radius:6px;
 }
 
-/* Title animation */
-h2 {
-    margin-bottom: 30px;
-    text-shadow: 0 0 10px #fff700;
-    animation: glow 1.5s infinite alternate;
+/* BUTTON COLORS */
+.primary-btn{
+background:#00e5ff;
+color:black;
+font-weight:bold;
+padding:12px;
+border:none;
+border-radius:8px;
+cursor:pointer;
+width:100%;
 }
 
-/* Animations */
-@keyframes glow {
-    from { text-shadow: 0 0 5px #fff700; }
-    to { text-shadow: 0 0 20px #fff700; }
+.primary-btn:hover{
+background:#00bcd4;
 }
-@keyframes fadeIn {
-    from {opacity: 0; transform: translateY(-20px);}
-    to {opacity: 1; transform: translateY(0);}
+
+.submit-btn{
+background:#00ff95;
+color:black;
+font-weight:bold;
+padding:12px;
+border:none;
+border-radius:8px;
+cursor:pointer;
+width:100%;
+margin-top:10px;
 }
+
+.submit-btn:hover{
+background:#00cc77;
+}
+
+.skill-section{
+display:none;
+margin-top:15px;
+background:rgba(255,255,255,0.1);
+padding:15px;
+border-radius:10px;
+}
+
+.result{
+margin-top:20px;
+background:rgba(0,0,0,0.4);
+padding:15px;
+border-radius:10px;
+}
+
+.thankyou{
+text-align:center;
+color:#00ff95;
+font-size:20px;
+font-weight:bold;
+margin-top:15px;
+}
+
 </style>
+
+<script>
+function showSkills(){
+document.getElementById("skills").style.display="block";
+}
+</script>
+
 </head>
+
 <body>
-<div class="card">
-<h2>🚀 Internship Application</h2>
-<form action="/submit" method="post">
-<input type="text" name="name" placeholder="Full Name" required>
-<input type="email" name="email" placeholder="Email" required>
-<input type="text" name="college" placeholder="College Name" required>
-<input type="text" name="skills" placeholder="Skills (comma separated)" required>
-<button type="submit">Submit ✨</button>
+
+<div class="container">
+
+<h1>🌟 Internship Application</h1>
+
+<form method="POST">
+
+<!-- BASIC DETAILS -->
+<input name="name" placeholder="Full Name" required>
+<input name="gmail" placeholder="Gmail Address" required>
+<input name="college" placeholder="College Name" required>
+
+<button type="button" class="primary-btn" onclick="showSkills()">
+Enter Skill Details
+</button>
+
+<!-- SKILL DETAILS -->
+<div id="skills" class="skill-section">
+
+<h3>Skill Assessment (1–100)</h3>
+
+<input name="python" placeholder="Python Skill" required>
+<input name="ml" placeholder="Machine Learning Skill" required>
+<input name="communication" placeholder="Communication Skill" required>
+<input name="problem_solving" placeholder="Problem Solving Skill" required>
+<input name="experience" placeholder="Experience Level" required>
+<input name="learning" placeholder="Learning Potential" required>
+<input name="resource" placeholder="Resource Access Index" required>
+
+<button class="submit-btn">Submit Application</button>
+
+</div>
+
 </form>
+
+{% if score %}
+
+<div class="result">
+<h2>Match Score: {{score}}</h2>
+
+<ul>
+{% for r in reasoning %}
+<li>{{r}}</li>
+{% endfor %}
+</ul>
+
+<div class="thankyou">
+✅ Thank you for registration! Your internship application has been submitted.
 </div>
+
+</div>
+
+{% endif %}
+
+</div>
+
 </body>
 </html>
-'''
+"""
 
-@app.route('/submit', methods=['POST'])
-def submit():
-    name = request.form['name']
-    email = request.form['email']
-    college = request.form['college']
-    skills = request.form['skills']
 
-    # Save data to CSV
-    with open('submissions.csv', 'a') as file:
-        file.write(f"{name},{email},{college},{skills}\n")
+@app.route("/", methods=["GET","POST"])
+def home():
+    score=None
+    reasoning=None
 
-    return f'''
-<html>
-<head>
-<title>Submitted!</title>
-<style>
-body {{
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    height: 100vh;
-    background: linear-gradient(135deg, #ee0979, #ff6a00);
-    font-family: 'Arial', sans-serif;
-}}
-.success {{
-    background: rgba(255,255,255,0.2);
-    backdrop-filter: blur(15px);
-    border-radius: 20px;
-    padding: 40px;
-    text-align: center;
-    color: white;
-    box-shadow: 0 8px 32px rgba(0,0,0,0.25);
-}}
-.success h3 {{
-    font-size: 24px;
-    margin-bottom: 15px;
-    animation: glow 1.5s infinite alternate;
-    text-shadow: 0 0 10px #fff700;
-}}
-.success a {{
-    display: inline-block;
-    margin-top: 20px;
-    padding: 12px 20px;
-    border-radius: 10px;
-    background: white;
-    color: #ee0979;
-    text-decoration: none;
-    font-weight: bold;
-    transition: 0.3s;
-}}
-.success a:hover {{
-    background: #fff700;
-    color: #ee0979;
-}}
-@keyframes glow {{
-    from {{ text-shadow: 0 0 5px #fff700; }}
-    to {{ text-shadow: 0 0 20px #fff700; }}
-}}
-</style>
-</head>
-<body>
-<div class="success">
-<h3>🎉 Thanks {name}!</h3>
-<p>Your internship application has been submitted successfully.</p>
-<a href="/">Submit Another</a>
-</div>
-</body>
-</html>
-'''
+    if request.method=="POST":
+        score, reasoning = calculate_score(request.form)
+
+    return render_template_string(TEMPLATE,
+                                  score=score,
+                                  reasoning=reasoning)
+
 
 if __name__ == "__main__":
     app.run(debug=True)
