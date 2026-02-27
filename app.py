@@ -23,20 +23,57 @@ LOGIN_PAGE = """
 <head>
 <title>Login - Internship Platform</title>
 <style>
-body {font-family:Segoe UI; display:flex;justify-content:center;align-items:center; min-height:100vh; background:#ffe259;}
-.container {background:white; padding:30px; border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,0.2); width:360px;}
-input{width:100%; padding:10px; margin:8px 0; border-radius:6px; border:1px solid #ccc;}
-button{width:100%; padding:12px; background:#111; color:white; border:none; border-radius:8px;}
-button:hover{background:#ff4d6d; cursor:pointer;}
-.error{color:red; text-align:center;}
+body {
+    font-family: 'Segoe UI', sans-serif;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    min-height:100vh;
+    background: linear-gradient(135deg, #a1c4fd, #c2e9fb); /* soft blue gradient */
+}
+.container {
+    background:white;
+    padding:30px;
+    border-radius:12px;
+    box-shadow:0 6px 20px rgba(0,0,0,0.15);
+    width:360px;
+}
+input {
+    width:100%;
+    padding:10px;
+    margin:8px 0;
+    border-radius:6px;
+    border:1px solid #ccc;
+}
+button {
+    width:100%;
+    padding:12px;
+    background:#ff6fa3; /* pink button */
+    color:white;
+    border:none;
+    border-radius:8px;
+    font-weight:bold;
+}
+button:hover {
+    background:#ff4d87;
+    cursor:pointer;
+}
+.error {
+    color:red;
+    text-align:center;
+}
+h2 {
+    color:#2c3e50;
+    text-align:center;
+}
 </style>
 </head>
 <body>
 <div class="container">
 <h2>Login to Internship Platform</h2>
 <form method="POST">
-<input type="text" name="username" placeholder="Username">
-<input type="password" name="password" placeholder="Password">
+<input type="text" name="username" placeholder="Username" required autofocus>
+<input type="password" name="password" placeholder="Password" required>
 <div class="error">{{error}}</div>
 <button type="submit">Login</button>
 </form>
@@ -107,14 +144,49 @@ PLATFORM_PAGE = """
 <head>
 <title>Internship Matching Platform</title>
 <style>
-body{font-family:Segoe UI; background:linear-gradient(135deg,#ffe259,#ff7eb3,#ff9966); display:flex; justify-content:center; align-items:center; min-height:100vh;}
-.container{width:620px; background:white; padding:30px; border-radius:18px;}
-input,select{width:100%; padding:10px; margin:8px 0;}
-button{width:100%; padding:12px; background:black; color:white; border:none; border-radius:8px;}
-.hidden{display:none;}
-.box{background:#f4f4f4; padding:10px; margin-top:8px; border-radius:8px;}
-.bar{height:26px;background:#0072ff;color:white;text-align:center;}
-.progress{background:#eee;border-radius:12px;overflow:hidden;}
+body {
+    font-family:'Segoe UI', sans-serif;
+    background: linear-gradient(135deg, #a1c4fd, #c2e9fb); /* soft blue gradient */
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    min-height:100vh;
+}
+.container {
+    width:620px;
+    background:white;
+    padding:30px;
+    border-radius:12px;
+    box-shadow:0 6px 20px rgba(0,0,0,0.15);
+}
+input,select {
+    width:100%;
+    padding:10px;
+    margin:8px 0;
+    border-radius:6px;
+    border:1px solid #ccc;
+}
+button {
+    width:100%;
+    padding:12px;
+    background:#ff6fa3; /* pink button */
+    color:white;
+    border:none;
+    border-radius:8px;
+    font-weight:bold;
+}
+button:hover {
+    background:#ff4d87;
+    cursor:pointer;
+}
+.hidden {display:none;}
+.box {
+    background:#f4f4f4;
+    padding:10px;
+    margin-top:8px;
+    border-radius:8px;
+}
+h2,h3 {color:#2c3e50;}
 </style>
 </head>
 <body>
@@ -158,7 +230,6 @@ button{width:100%; padding:12px; background:black; color:white; border:none; bor
 <div class="box">{{s}} → {{c}}</div>
 {% endfor %}
 
-<!-- New Application button redirects to login and clears session -->
 <form action="{{ url_for('logout') }}" method="GET">
 <button>New Application</button>
 </form>
@@ -168,20 +239,24 @@ button{width:100%; padding:12px; background:black; color:white; border:none; bor
 <script>
 const roleSkills={"AI Intern":["Python","Machine Learning","Statistics"],"Web Developer":["HTML","CSS","JavaScript"],"Data Analyst":["Python","SQL","Statistics"]};
 function goStep2(){
-let role=document.getElementById("role").value;
-document.getElementById("role_hidden").value=role;
-let skills=roleSkills[role];
-let area=document.getElementById("skillsArea");
-area.innerHTML="";
-skills.forEach(skill=>{
-let label=document.createElement("label");
-label.innerText=skill+" score (1-100)";
-let input=document.createElement("input");
-input.type="number"; input.name="score_"+skill;
-area.appendChild(label); area.appendChild(input);
-});
-step1.classList.add("hidden");
-step2.classList.remove("hidden");
+    let role=document.getElementById("role").value;
+    if(!role){
+        alert("Please select a role before continuing.");
+        return;
+    }
+    document.getElementById("role_hidden").value=role;
+    let skills=roleSkills[role];
+    let area=document.getElementById("skillsArea");
+    area.innerHTML="";
+    skills.forEach(skill=>{
+        let label=document.createElement("label");
+        label.innerText=skill+" score (1-100)";
+        let input=document.createElement("input");
+        input.type="number"; input.name="score_"+skill; input.min=1; input.max=100;
+        area.appendChild(label); area.appendChild(input);
+    });
+    document.getElementById("step1").classList.add("hidden");
+    document.getElementById("step2").classList.remove("hidden");
 }
 </script>
 </body>
