@@ -2,38 +2,78 @@ from flask import Flask, request, render_template_string
 
 app = Flask(__name__)
 
-# ---------------- ROLE REQUIREMENTS (Requirement Mapping) ----------------
+# ---------------- ROLE REQUIREMENTS (PROJECT MAPPING) ----------------
 
 ROLE_REQUIREMENTS = {
-    "Web Developer Intern": {
-        "HTML":0.4,
-        "CSS":0.3,
-        "Python":0.3
+    "AI Intern": {
+        "Python": 0.35,
+        "Machine Learning": 0.40,
+        "Statistics": 0.25
     },
-    "ML Intern":{
-        "Python":0.5,
-        "ML":0.4,
-        "Statistics":0.1
+    "Web Developer": {
+        "HTML": 0.30,
+        "CSS": 0.30,
+        "JavaScript": 0.40
     },
-    "Software Developer Intern":{
-        "Python":0.4,
-        "DSA":0.4,
-        "ProblemSolving":0.2
+    "Data Analyst": {
+        "Python": 0.40,
+        "SQL": 0.30,
+        "Statistics": 0.30
     }
 }
 
-# ---------------- HTML TEMPLATE ----------------
+# ---------------- MATCH ENGINE ----------------
 
-TEMPLATE = """
+def calculate_match(form):
+
+    role = form.get("role")
+    skills_required = ROLE_REQUIREMENTS[role]
+
+    reasoning = []
+    contributions = []
+    weighted_sum = 0
+    total_weight = 0
+
+    for skill, weight in skills_required.items():
+
+        value = form.get(f"score_{skill}")
+
+        # fairness-aware handling
+        if value is None or value == "":
+            score = 50
+            reasoning.append(
+                f"{skill}: Missing → fairness neutral score (50)"
+            )
+        else:
+            score = int(value)
+            reasoning.append(
+                f"{skill}: {score}/100 × weight {weight}"
+            )
+
+        contribution = round(score * weight, 2)
+        contributions.append((skill, contribution))
+
+        weighted_sum += contribution
+        total_weight += weight
+
+    final_score = round(weighted_sum / total_weight, 2)
+
+    return final_score, reasoning, contributions
+
+
+# ---------------- UI TEMPLATE ----------------
+
+PAGE = """
 <!DOCTYPE html>
 <html>
 <head>
-<title>Explainable Internship Matching</title>
+<title>Explainable Internship Matching AI</title>
 
 <style>
+
 body{
-font-family:Arial;
-background:linear-gradient(to right,yellow,pink,orange);
+font-family:'Segoe UI';
+background:linear-gradient(135deg,#ffe259,#ff7eb3,#ff9966);
 display:flex;
 justify-content:center;
 align-items:center;
@@ -42,34 +82,81 @@ margin:0;
 }
 
 .container{
-background:white;
-padding:25px;
-border-radius:12px;
-width:480px;
-box-shadow:0 0 15px rgba(0,0,0,0.25);
+width:560px;
+background:rgba(255,255,255,0.85);
+backdrop-filter:blur(15px);
+padding:30px;
+border-radius:18px;
+box-shadow:0 15px 40px rgba(0,0,0,0.25);
+animation:fade 0.6s ease;
 }
+
+@keyframes fade{
+from{opacity:0;transform:translateY(20px);}
+to{opacity:1;}
+}
+
+h2{text-align:center;color:#222}
 
 input,select{
 width:100%;
-padding:10px;
-margin:6px 0 12px 0;
-border-radius:6px;
+padding:11px;
+margin:8px 0;
+border-radius:8px;
 border:1px solid #ccc;
 }
 
 button{
 width:100%;
-padding:12px;
-background:black;
+padding:13px;
+background:#111;
 color:white;
 border:none;
-border-radius:6px;
+border-radius:10px;
+font-weight:bold;
 cursor:pointer;
+transition:.3s;
+}
+
+button:hover{
+background:#ff4d6d;
+transform:scale(1.04);
 }
 
 .hidden{display:none;}
-.reason{background:#f5f5f5;padding:10px;border-radius:8px;margin-top:10px;}
-.error{color:red;text-align:center;}
+.error{color:red;text-align:center}
+
+.progress{
+height:24px;
+background:#eee;
+border-radius:12px;
+overflow:hidden;
+margin-top:15px;
+}
+
+.bar{
+height:100%;
+background:linear-gradient(90deg,#00c6ff,#0072ff);
+color:white;
+text-align:center;
+font-weight:bold;
+}
+
+.reason{
+background:#f5f5f5;
+padding:10px;
+border-radius:8px;
+margin-top:8px;
+}
+
+.skillbox{
+background:#fafafa;
+padding:8px;
+margin-top:6px;
+border-radius:6px;
+font-size:14px;
+}
+
 </style>
 </head>
 
@@ -78,73 +165,81 @@ cursor:pointer;
 
 {% if not score %}
 
-<div id="slide1">
-<h2>Basic Details</h2>
+<!-- STEP 1 -->
+<div id="step1">
+<h2>AI Internship Application</h2>
+
 <input id="name" placeholder="Full Name">
 <input id="email" placeholder="Email">
 <input id="college" placeholder="College">
-<button onclick="nextSlide(2)">Next</button>
-</div>
-
-<div id="slide2" class="hidden">
-<h2>Role & Skills</h2>
 
 <select id="role">
-<option value="">Select Preferred Internship Role</option>
-<option>Web Developer Intern</option>
-<option>ML Intern</option>
-<option>Software Developer Intern</option>
+<option value="">Select Preferred Role</option>
+<option>AI Intern</option>
+<option>Web Developer</option>
+<option>Data Analyst</option>
 </select>
-
-<input id="skills" placeholder="Skills (Python,HTML,ML)">
-
-<label>
-<input type="checkbox" id="confirm">
-I confirm information is correct
-</label>
 
 <div id="error1" class="error"></div>
 
-<button onclick="goToSkills()">Proceed</button>
+<button onclick="generateSkills()">Continue</button>
 </div>
+
 
 <form method="POST" onsubmit="return validateSkills()">
 
+<!-- STEP 2 -->
 <div id="step2" class="hidden">
-<h2>Skill Proficiency (1-100)</h2>
+
+<h2>Skill Competency Evaluation</h2>
 
 <div id="skillInputs"></div>
 
-<input type="hidden" name="skill_names" id="skill_names">
-<input type="hidden" name="role_name" id="role_name">
+<input type="hidden" name="role" id="role_hidden">
 
 <div id="error2" class="error"></div>
 
-<button>Calculate Match Score</button>
+<button>Generate Explainable Match</button>
+
 </div>
 
 </form>
 
 {% endif %}
 
+
 {% if score %}
 
-<h2>Match Score: {{score}}%</h2>
+<h2>AI Match Analysis</h2>
 
-<div class="reason">
-<b>Reasoning:</b>
-<ul>
-{% for r in reasoning %}
-<li>{{r}}</li>
-{% endfor %}
-</ul>
+<p><b>Final Match Score:</b> {{score}}%</p>
+
+<div class="progress">
+<div class="bar" style="width:{{score}}%">
+{{score}}%
+</div>
 </div>
 
-<p><b>Thanks for registering in internship.</b></p>
-<p><b>Further details will be send to respected mail.</b></p>
+<h3>Explainable Reasoning</h3>
+
+{% for r in reasoning %}
+<div class="reason">{{r}}</div>
+{% endfor %}
+
+<h3>Skill Contribution</h3>
+
+{% for s,c in contributions %}
+<div class="skillbox">
+{{s}} Contribution → {{c}}
+</div>
+{% endfor %}
+
+<p style="margin-top:15px">
+<b>Thank you for registering. Opportunities are allocated using transparent AI evaluation.</b>
+</p>
 
 <form method="GET">
-<button>Other Response</button>
+<button>Submit Another Response</button>
 </form>
 
 {% endif %}
@@ -153,33 +248,35 @@ I confirm information is correct
 
 <script>
 
-function nextSlide(n){
-document.getElementById("slide1").classList.add("hidden");
-document.getElementById("slide2").classList.remove("hidden");
-}
+const roleSkills={
+"AI Intern":["Python","Machine Learning","Statistics"],
+"Web Developer":["HTML","CSS","JavaScript"],
+"Data Analyst":["Python","SQL","Statistics"]
+};
 
-let skillsArray=[];
+function generateSkills(){
 
-function goToSkills(){
+let name=v("name");
+let email=v("email");
+let college=v("college");
+let role=v("role");
 
-let role=document.getElementById("role").value;
-let skills=document.getElementById("skills").value.trim();
-let confirm=document.getElementById("confirm").checked;
-
-if(!role||!skills||!confirm){
+if(!name||!email||!college||!role){
 document.getElementById("error1").innerText=
-"Role, skills and confirmation required.";
+"All details required.";
 return;
 }
 
-skillsArray=skills.split(",").map(s=>s.trim());
+document.getElementById("role_hidden").value=role;
 
+let skills=roleSkills[role];
 let div=document.getElementById("skillInputs");
 div.innerHTML="";
 
-skillsArray.forEach(skill=>{
+skills.forEach(skill=>{
+
 let label=document.createElement("label");
-label.innerText=skill+" Skill Level";
+label.innerText=skill+" proficiency (1-100)";
 
 let input=document.createElement("input");
 input.type="number";
@@ -190,24 +287,29 @@ input.className="skillScore";
 
 div.appendChild(label);
 div.appendChild(input);
+
 });
 
-document.getElementById("skill_names").value=skillsArray.join(",");
-document.getElementById("role_name").value=role;
-
-document.getElementById("slide2").classList.add("hidden");
+document.getElementById("step1").classList.add("hidden");
 document.getElementById("step2").classList.remove("hidden");
 }
 
 function validateSkills(){
+
 let scores=document.getElementsByClassName("skillScore");
+
 for(let i=0;i<scores.length;i++){
 if(scores[i].value===""){
-document.getElementById("error2").innerText="All scores required.";
+document.getElementById("error2").innerText=
+"All skill scores required.";
 return false;
 }
 }
 return true;
+}
+
+function v(id){
+return document.getElementById(id).value.trim();
 }
 
 </script>
@@ -216,49 +318,22 @@ return true;
 </html>
 """
 
-# ---------------- MATCHING LOGIC ----------------
 
-def calculate_match(form):
-
-    role=form.get("role_name")
-    requirements=ROLE_REQUIREMENTS.get(role,{})
-
-    user_skills=form.get("skill_names").split(",")
-
-    reasoning=[]
-    total_score=0
-
-    for skill,weight in requirements.items():
-
-        if skill in user_skills:
-            level=int(form.get(f"score_{skill}",50))
-        else:
-            # fairness-aware neutral handling
-            level=50
-            reasoning.append(f"{skill} not provided → neutral fairness score applied")
-
-        contribution=level*weight
-        total_score+=contribution
-
-        if level>75:
-            reasoning.append(f"{skill} strong match (+{round(contribution,1)})")
-        elif level>50:
-            reasoning.append(f"{skill} moderate match (+{round(contribution,1)})")
-        else:
-            reasoning.append(f"{skill} needs improvement (+{round(contribution,1)})")
-
-    return round(total_score,2), reasoning
-
-
-@app.route("/",methods=["GET","POST"])
+@app.route("/", methods=["GET","POST"])
 def home():
     score=None
     reasoning=None
+    contributions=None
 
     if request.method=="POST":
-        score,reasoning=calculate_match(request.form)
+        score, reasoning, contributions = calculate_match(request.form)
 
-    return render_template_string(TEMPLATE,score=score,reasoning=reasoning)
+    return render_template_string(
+        PAGE,
+        score=score,
+        reasoning=reasoning,
+        contributions=contributions
+    )
 
 
 if __name__=="__main__":
