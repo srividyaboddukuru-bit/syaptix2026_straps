@@ -2,9 +2,9 @@ from flask import Flask, request, render_template_string
 
 app = Flask(__name__)
 
-# -------------------------------------------------
-# Internship Requirement Model
-# -------------------------------------------------
+# ------------------------------------------------
+# Matching Model
+# ------------------------------------------------
 PROJECT = {
     "python": 80,
     "ml": 70,
@@ -24,9 +24,9 @@ def fairness_boost(resource):
     return 100 - resource
 
 
-# -------------------------------------------------
-# Explainable Score Calculation
-# -------------------------------------------------
+# ------------------------------------------------
+# Score Calculation (STEP 3)
+# ------------------------------------------------
 def calculate_score(form):
 
     skills = {
@@ -43,21 +43,21 @@ def calculate_score(form):
     reasoning = []
 
     alignment = sum(min(skills[k], PROJECT[k]) for k in PROJECT)/len(PROJECT)
-    reasoning.append("Skills aligned with internship competency requirements.")
+    reasoning.append("Competency alignment calculated from submitted skills.")
 
     gaps = [abs(PROJECT[k]-skills[k]) for k in PROJECT]
     requirement_fit = 100 - (sum(gaps)/len(gaps))
-    reasoning.append("Requirement mapping computed using skill-gap analysis.")
+    reasoning.append("Requirement mapping based on skill-gap analysis.")
 
     fairness = fairness_boost(resource)
     reasoning.append("Fairness-aware adjustment applied.")
 
     final_score = (
-        alignment*WEIGHTS["competency"] +
-        requirement_fit*WEIGHTS["requirement"] +
-        experience*WEIGHTS["experience"] +
-        learning*WEIGHTS["learning"] +
-        fairness*WEIGHTS["fairness"]
+        alignment*WEIGHTS["competency"]
+        + requirement_fit*WEIGHTS["requirement"]
+        + experience*WEIGHTS["experience"]
+        + learning*WEIGHTS["learning"]
+        + fairness*WEIGHTS["fairness"]
     )
 
     reasoning.append(f"✅ Final Match Score = {final_score:.2f}")
@@ -65,123 +65,114 @@ def calculate_score(form):
     return round(final_score,2), reasoning
 
 
-# -------------------------------------------------
-# WEB APPLICATION UI
-# -------------------------------------------------
+# ------------------------------------------------
+# WEB APP TEMPLATE
+# ------------------------------------------------
 TEMPLATE = """
 <!DOCTYPE html>
 <html>
 <head>
-<title>Explainable Internship Application</title>
+<title>Explainable Internship Platform</title>
 
 <style>
 
-/* 🌈 VIBGYOR BACKGROUND */
 body{
 margin:0;
 font-family:Segoe UI;
-background:linear-gradient(
-90deg,
-#9400D3,
-#4B0082,
-#0000FF,
-#00FF00,
-#FFFF00,
-#FF7F00,
-#FF0000
-);
-background-size:400% 400%;
-animation:gradientMove 12s ease infinite;
-color:white;
-}
-
-@keyframes gradientMove{
-0%{background-position:0% 50%;}
-50%{background-position:100% 50%;}
-100%{background-position:0% 50%;}
+background:linear-gradient(135deg,#ff9a9e,#ffb347,#ffe066);
+height:100vh;
+display:flex;
+justify-content:center;
+align-items:center;
+color:#222;
 }
 
 .container{
 width:520px;
-margin:40px auto;
-background:rgba(0,0,0,0.45);
-padding:25px;
+background:white;
+padding:30px;
 border-radius:15px;
-backdrop-filter:blur(12px);
-box-shadow:0 0 25px rgba(0,0,0,0.5);
+box-shadow:0 8px 25px rgba(0,0,0,0.25);
 }
 
-h1{text-align:center;}
+h1{text-align:center;color:#ff5e78;}
 
 input{
 width:100%;
 padding:10px;
 margin:8px 0;
-border:none;
+border:1px solid #ccc;
 border-radius:6px;
 }
 
-/* BUTTON COLORS */
-.primary-btn{
-background:#00e5ff;
-color:black;
-font-weight:bold;
+button{
+width:100%;
 padding:12px;
 border:none;
 border-radius:8px;
-cursor:pointer;
-width:100%;
-}
-
-.primary-btn:hover{
-background:#00bcd4;
-}
-
-.submit-btn{
-background:#00ff95;
-color:black;
 font-weight:bold;
-padding:12px;
-border:none;
-border-radius:8px;
 cursor:pointer;
-width:100%;
 margin-top:10px;
+color:white;
 }
 
-.submit-btn:hover{
-background:#00cc77;
-}
+.next-btn{background:#ff7f50;}
+.submit-btn{background:#ff5e78;}
 
-.skill-section{
-display:none;
-margin-top:15px;
-background:rgba(255,255,255,0.1);
-padding:15px;
-border-radius:10px;
-}
+.section{display:none;}
 
 .result{
-margin-top:20px;
-background:rgba(0,0,0,0.4);
+background:#fff3cd;
 padding:15px;
 border-radius:10px;
+margin-top:15px;
 }
 
 .thankyou{
 text-align:center;
-color:#00ff95;
-font-size:20px;
+font-size:22px;
+color:#28a745;
 font-weight:bold;
 margin-top:15px;
+}
+
+.error{
+color:red;
+text-align:center;
 }
 
 </style>
 
 <script>
-function showSkills(){
-document.getElementById("skills").style.display="block";
+
+/* STEP CONTROL */
+function goToStep2(){
+let name=document.getElementById("name").value.trim();
+let gmail=document.getElementById("gmail").value.trim();
+let college=document.getElementById("college").value.trim();
+
+if(!name || !gmail || !college){
+document.getElementById("error1").innerText =
+"⚠ Fill all basic details first.";
+return;
 }
+
+document.getElementById("step1").style.display="none";
+document.getElementById("step2").style.display="block";
+}
+
+/* validate skills before submit */
+function validateStep2(){
+let inputs=document.querySelectorAll("#step2 input");
+for(let i=0;i<inputs.length;i++){
+if(inputs[i].value===""){
+alert("Please complete all skill details.");
+return false;
+}
+}
+return true;
+}
+
 </script>
 
 </head>
@@ -192,31 +183,39 @@ document.getElementById("skills").style.display="block";
 
 <h1>🌟 Internship Application</h1>
 
-<form method="POST">
+<form method="POST" onsubmit="return validateStep2()">
 
-<!-- BASIC DETAILS -->
-<input name="name" placeholder="Full Name" required>
-<input name="gmail" placeholder="Gmail Address" required>
-<input name="college" placeholder="College Name" required>
+<!-- STEP 1 -->
+<div id="step1">
 
-<button type="button" class="primary-btn" onclick="showSkills()">
-Enter Skill Details
+<input id="name" name="name" placeholder="Full Name">
+<input id="gmail" name="gmail" placeholder="Gmail Address">
+<input id="college" name="college" placeholder="College Name">
+
+<div id="error1" class="error"></div>
+
+<button type="button" class="next-btn" onclick="goToStep2()">
+Next → Skills
 </button>
 
-<!-- SKILL DETAILS -->
-<div id="skills" class="skill-section">
+</div>
+
+<!-- STEP 2 -->
+<div id="step2" class="section">
 
 <h3>Skill Assessment (1–100)</h3>
 
-<input name="python" placeholder="Python Skill" required>
-<input name="ml" placeholder="Machine Learning Skill" required>
-<input name="communication" placeholder="Communication Skill" required>
-<input name="problem_solving" placeholder="Problem Solving Skill" required>
-<input name="experience" placeholder="Experience Level" required>
-<input name="learning" placeholder="Learning Potential" required>
-<input name="resource" placeholder="Resource Access Index" required>
+<input name="python" placeholder="Python Skill">
+<input name="ml" placeholder="Machine Learning Skill">
+<input name="communication" placeholder="Communication Skill">
+<input name="problem_solving" placeholder="Problem Solving Skill">
+<input name="experience" placeholder="Experience Level">
+<input name="learning" placeholder="Learning Potential">
+<input name="resource" placeholder="Resource Access Index">
 
-<button class="submit-btn">Submit Application</button>
+<button class="submit-btn">
+Submit Application
+</button>
 
 </div>
 
@@ -224,7 +223,9 @@ Enter Skill Details
 
 {% if score %}
 
+<!-- STEP 3 RESULT -->
 <div class="result">
+
 <h2>Match Score: {{score}}</h2>
 
 <ul>
@@ -234,7 +235,8 @@ Enter Skill Details
 </ul>
 
 <div class="thankyou">
-✅ Thank you for registration! Your internship application has been submitted.
+🎉 Thank you for registering!  
+Your internship application has been submitted successfully.
 </div>
 
 </div>
@@ -250,15 +252,18 @@ Enter Skill Details
 
 @app.route("/", methods=["GET","POST"])
 def home():
+
     score=None
     reasoning=None
 
     if request.method=="POST":
         score, reasoning = calculate_score(request.form)
 
-    return render_template_string(TEMPLATE,
-                                  score=score,
-                                  reasoning=reasoning)
+    return render_template_string(
+        TEMPLATE,
+        score=score,
+        reasoning=reasoning
+    )
 
 
 if __name__ == "__main__":
