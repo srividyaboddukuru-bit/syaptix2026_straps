@@ -1,4 +1,4 @@
-from flask import Flask, request, render_template_string, redirect, url_for
+from flask import Flask, request, render_template_string
 
 app = Flask(__name__)
 
@@ -6,7 +6,7 @@ TEMPLATE = """
 <!DOCTYPE html>
 <html>
 <head>
-<title>Internship Registration</title>
+<title>Internship Application</title>
 
 <style>
 body{
@@ -23,13 +23,13 @@ margin:0;
 background:white;
 padding:25px;
 border-radius:12px;
-width:420px;
+width:450px;
 box-shadow:0 0 15px rgba(0,0,0,0.25);
 }
 
-h2{text-align:center;color:#222;}
+h2{text-align:center}
 
-input{
+input,select{
 width:100%;
 padding:10px;
 margin:6px 0 12px 0;
@@ -46,10 +46,7 @@ border:none;
 border-radius:6px;
 cursor:pointer;
 font-weight:bold;
-margin-top:10px;
 }
-
-button:hover{background:#333;}
 
 .hidden{display:none;}
 .error{color:red;text-align:center;}
@@ -57,29 +54,59 @@ button:hover{background:#333;}
 </head>
 
 <body>
-
 <div class="container">
 
 {% if not score %}
 
-<div id="step1">
-<h2>Step 1: Basic Details</h2>
-
-<input id="name" placeholder="Name">
+<!-- SLIDE 1 -->
+<div id="slide1">
+<h2>Personal Details</h2>
+<input id="name" placeholder="Full Name">
 <input id="email" placeholder="Email">
-<input id="college" placeholder="College">
 <input id="mobile" placeholder="Mobile">
-<input id="skills" placeholder="Skills (Python,Java,HTML)">
+<input id="city" placeholder="City">
+<button onclick="nextSlide(2)">Next</button>
+</div>
+
+<!-- SLIDE 2 -->
+<div id="slide2" class="hidden">
+<h2>Academic Details</h2>
+<input id="college" placeholder="College Name">
+<input placeholder="Degree">
+<input placeholder="Branch">
+<input placeholder="Year of Study">
+<button onclick="nextSlide(3)">Next</button>
+</div>
+
+<!-- SLIDE 3 -->
+<div id="slide3" class="hidden">
+<h2>Skills & Preferences</h2>
+
+<input id="skills" placeholder="Technical Skills (Python,ML,HTML)">
+
+<input placeholder="Preferred Internship Role">
+
+<select>
+<option>Work Mode</option>
+<option>Remote</option>
+<option>Hybrid</option>
+<option>Onsite</option>
+</select>
+
+<label>
+<input type="checkbox" id="confirm">
+I confirm the information is correct
+</label>
 
 <div id="error1" class="error"></div>
 
-<button onclick="goToStep2()">Next</button>
+<button onclick="goToSkills()">Proceed to Skill Scoring</button>
 </div>
 
 <form method="POST" onsubmit="return validateSkills()">
 
 <div id="step2" class="hidden">
-<h2>Step 2: Skill Scores</h2>
+<h2>Skill Proficiency (1-100)</h2>
 
 <div id="skillInputs"></div>
 
@@ -96,7 +123,7 @@ button:hover{background:#333;}
 
 {% if score %}
 
-<h2>Step 3: Match Score</h2>
+<h2>Match Score</h2>
 
 <p><b>Your Match Score:</b> {{score}}%</p>
 
@@ -112,23 +139,29 @@ button:hover{background:#333;}
 
 <script>
 
-let skillsArray=[];
-
-function goToStep2(){
-
-let name=document.getElementById("name").value.trim();
-let email=document.getElementById("email").value.trim();
-let college=document.getElementById("college").value.trim();
-let mobile=document.getElementById("mobile").value.trim();
-let skills=document.getElementById("skills").value.trim();
-
-if(!name || !email || !college || !mobile || !skills){
-document.getElementById("error1").innerText=
-"Basic details are compulsory.";
-return;
+function nextSlide(n){
+document.querySelectorAll("[id^='slide']")
+.forEach(s=>s.classList.add("hidden"));
+document.getElementById("slide"+n)
+.classList.remove("hidden");
 }
 
-document.getElementById("error1").innerText="";
+let skillsArray=[];
+
+function goToSkills(){
+
+let name=v("name");
+let email=v("email");
+let mobile=v("mobile");
+let college=v("college");
+let skills=v("skills");
+let confirm=document.getElementById("confirm").checked;
+
+if(!name||!email||!mobile||!college||!skills||!confirm){
+document.getElementById("error1").innerText=
+"Please complete required details.";
+return;
+}
 
 skillsArray=skills.split(",").map(s=>s.trim());
 
@@ -136,36 +169,41 @@ let div=document.getElementById("skillInputs");
 div.innerHTML="";
 
 skillsArray.forEach(skill=>{
-
 let label=document.createElement("label");
-label.innerText=skill+" Score (0-100)";
+label.innerText=skill+" Skill Level";
 
 let input=document.createElement("input");
 input.type="number";
-input.min="0";
+input.min="1";
 input.max="100";
 input.name="score_"+skill;
 input.className="skillScore";
-input.placeholder="Enter "+skill+" score";
 
 div.appendChild(label);
 div.appendChild(input);
 });
 
-document.getElementById("skill_names").value=skillsArray.join(",");
+document.getElementById("skill_names").value=
+skillsArray.join(",");
 
-document.getElementById("step1").classList.add("hidden");
-document.getElementById("step2").classList.remove("hidden");
+document.querySelectorAll("[id^='slide']")
+.forEach(s=>s.classList.add("hidden"));
+
+document.getElementById("step2")
+.classList.remove("hidden");
+}
+
+function v(id){
+return document.getElementById(id).value.trim();
 }
 
 function validateSkills(){
-
 let scores=document.getElementsByClassName("skillScore");
 
 for(let i=0;i<scores.length;i++){
 if(scores[i].value===""){
 document.getElementById("error2").innerText=
-"Skill scores are compulsory.";
+"All skill scores required.";
 return false;
 }
 }
@@ -179,16 +217,8 @@ return true;
 """
 
 def calculate_score(form):
-    skills_text=form.get("skill_names")
-    if not skills_text:
-        return None
-    skills=skills_text.split(",")
-    total=0
-    for skill in skills:
-        value=form.get(f"score_{skill}")
-        if value is None or value=="":
-            return None
-        total+=int(value)
+    skills=form.get("skill_names").split(",")
+    total=sum(int(form.get(f"score_{s}")) for s in skills)
     return round(total/len(skills),2)
 
 @app.route("/",methods=["GET","POST"])
