@@ -2,11 +2,33 @@ from flask import Flask, request, render_template_string
 
 app = Flask(__name__)
 
+# ---------------- ROLE REQUIREMENTS (Requirement Mapping) ----------------
+
+ROLE_REQUIREMENTS = {
+    "Web Developer Intern": {
+        "HTML":0.4,
+        "CSS":0.3,
+        "Python":0.3
+    },
+    "ML Intern":{
+        "Python":0.5,
+        "ML":0.4,
+        "Statistics":0.1
+    },
+    "Software Developer Intern":{
+        "Python":0.4,
+        "DSA":0.4,
+        "ProblemSolving":0.2
+    }
+}
+
+# ---------------- HTML TEMPLATE ----------------
+
 TEMPLATE = """
 <!DOCTYPE html>
 <html>
 <head>
-<title>Internship Application</title>
+<title>Explainable Internship Matching</title>
 
 <style>
 body{
@@ -23,11 +45,9 @@ margin:0;
 background:white;
 padding:25px;
 border-radius:12px;
-width:450px;
+width:480px;
 box-shadow:0 0 15px rgba(0,0,0,0.25);
 }
-
-h2{text-align:center}
 
 input,select{
 width:100%;
@@ -45,10 +65,10 @@ color:white;
 border:none;
 border-radius:6px;
 cursor:pointer;
-font-weight:bold;
 }
 
 .hidden{display:none;}
+.reason{background:#f5f5f5;padding:10px;border-radius:8px;margin-top:10px;}
 .error{color:red;text-align:center;}
 </style>
 </head>
@@ -58,49 +78,34 @@ font-weight:bold;
 
 {% if not score %}
 
-<!-- SLIDE 1 -->
 <div id="slide1">
-<h2>Personal Details</h2>
+<h2>Basic Details</h2>
 <input id="name" placeholder="Full Name">
 <input id="email" placeholder="Email">
-<input id="mobile" placeholder="Mobile">
-<input id="city" placeholder="City">
+<input id="college" placeholder="College">
 <button onclick="nextSlide(2)">Next</button>
 </div>
 
-<!-- SLIDE 2 -->
 <div id="slide2" class="hidden">
-<h2>Academic Details</h2>
-<input id="college" placeholder="College Name">
-<input placeholder="Degree">
-<input placeholder="Branch">
-<input placeholder="Year of Study">
-<button onclick="nextSlide(3)">Next</button>
-</div>
+<h2>Role & Skills</h2>
 
-<!-- SLIDE 3 -->
-<div id="slide3" class="hidden">
-<h2>Skills & Preferences</h2>
-
-<input id="skills" placeholder="Technical Skills (Python,ML,HTML)">
-
-<input placeholder="Preferred Internship Role">
-
-<select>
-<option>Work Mode</option>
-<option>Remote</option>
-<option>Hybrid</option>
-<option>Onsite</option>
+<select id="role">
+<option value="">Select Preferred Internship Role</option>
+<option>Web Developer Intern</option>
+<option>ML Intern</option>
+<option>Software Developer Intern</option>
 </select>
+
+<input id="skills" placeholder="Skills (Python,HTML,ML)">
 
 <label>
 <input type="checkbox" id="confirm">
-I confirm the information is correct
+I confirm information is correct
 </label>
 
 <div id="error1" class="error"></div>
 
-<button onclick="goToSkills()">Proceed to Skill Scoring</button>
+<button onclick="goToSkills()">Proceed</button>
 </div>
 
 <form method="POST" onsubmit="return validateSkills()">
@@ -111,10 +116,11 @@ I confirm the information is correct
 <div id="skillInputs"></div>
 
 <input type="hidden" name="skill_names" id="skill_names">
+<input type="hidden" name="role_name" id="role_name">
 
 <div id="error2" class="error"></div>
 
-<button>Submit Application</button>
+<button>Calculate Match Score</button>
 </div>
 
 </form>
@@ -123,11 +129,19 @@ I confirm the information is correct
 
 {% if score %}
 
-<h2>Match Score</h2>
+<h2>Match Score: {{score}}%</h2>
 
-<p><b>Your Match Score:</b> {{score}}%</p>
+<div class="reason">
+<b>Reasoning:</b>
+<ul>
+{% for r in reasoning %}
+<li>{{r}}</li>
+{% endfor %}
+</ul>
+</div>
 
-<p><b>Thanks for registering in internship... further details will be mailed to you.</b></p>
+<p><b>Thanks for registering in internship.</b></p>
+<p><b>Further details will be send to respected mail.</b></p>
 
 <form method="GET">
 <button>Other Response</button>
@@ -140,26 +154,21 @@ I confirm the information is correct
 <script>
 
 function nextSlide(n){
-document.querySelectorAll("[id^='slide']")
-.forEach(s=>s.classList.add("hidden"));
-document.getElementById("slide"+n)
-.classList.remove("hidden");
+document.getElementById("slide1").classList.add("hidden");
+document.getElementById("slide2").classList.remove("hidden");
 }
 
 let skillsArray=[];
 
 function goToSkills(){
 
-let name=v("name");
-let email=v("email");
-let mobile=v("mobile");
-let college=v("college");
-let skills=v("skills");
+let role=document.getElementById("role").value;
+let skills=document.getElementById("skills").value.trim();
 let confirm=document.getElementById("confirm").checked;
 
-if(!name||!email||!mobile||!college||!skills||!confirm){
+if(!role||!skills||!confirm){
 document.getElementById("error1").innerText=
-"Please complete required details.";
+"Role, skills and confirmation required.";
 return;
 }
 
@@ -183,27 +192,18 @@ div.appendChild(label);
 div.appendChild(input);
 });
 
-document.getElementById("skill_names").value=
-skillsArray.join(",");
+document.getElementById("skill_names").value=skillsArray.join(",");
+document.getElementById("role_name").value=role;
 
-document.querySelectorAll("[id^='slide']")
-.forEach(s=>s.classList.add("hidden"));
-
-document.getElementById("step2")
-.classList.remove("hidden");
-}
-
-function v(id){
-return document.getElementById(id).value.trim();
+document.getElementById("slide2").classList.add("hidden");
+document.getElementById("step2").classList.remove("hidden");
 }
 
 function validateSkills(){
 let scores=document.getElementsByClassName("skillScore");
-
 for(let i=0;i<scores.length;i++){
 if(scores[i].value===""){
-document.getElementById("error2").innerText=
-"All skill scores required.";
+document.getElementById("error2").innerText="All scores required.";
 return false;
 }
 }
@@ -216,17 +216,50 @@ return true;
 </html>
 """
 
-def calculate_score(form):
-    skills=form.get("skill_names").split(",")
-    total=sum(int(form.get(f"score_{s}")) for s in skills)
-    return round(total/len(skills),2)
+# ---------------- MATCHING LOGIC ----------------
+
+def calculate_match(form):
+
+    role=form.get("role_name")
+    requirements=ROLE_REQUIREMENTS.get(role,{})
+
+    user_skills=form.get("skill_names").split(",")
+
+    reasoning=[]
+    total_score=0
+
+    for skill,weight in requirements.items():
+
+        if skill in user_skills:
+            level=int(form.get(f"score_{skill}",50))
+        else:
+            # fairness-aware neutral handling
+            level=50
+            reasoning.append(f"{skill} not provided → neutral fairness score applied")
+
+        contribution=level*weight
+        total_score+=contribution
+
+        if level>75:
+            reasoning.append(f"{skill} strong match (+{round(contribution,1)})")
+        elif level>50:
+            reasoning.append(f"{skill} moderate match (+{round(contribution,1)})")
+        else:
+            reasoning.append(f"{skill} needs improvement (+{round(contribution,1)})")
+
+    return round(total_score,2), reasoning
+
 
 @app.route("/",methods=["GET","POST"])
 def home():
     score=None
+    reasoning=None
+
     if request.method=="POST":
-        score=calculate_score(request.form)
-    return render_template_string(TEMPLATE,score=score)
+        score,reasoning=calculate_match(request.form)
+
+    return render_template_string(TEMPLATE,score=score,reasoning=reasoning)
+
 
 if __name__=="__main__":
     app.run(debug=True)
