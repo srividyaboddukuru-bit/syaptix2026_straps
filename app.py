@@ -1,291 +1,350 @@
-from flask import Flask, request, render_template_string, redirect, url_for, session
+from flask import Flask, request, render_template_string, redirect, session
+from werkzeug.utils import secure_filename
+import os
 
 app = Flask(__name__)
 app.secret_key = "hackathon_secret_key"
 
-# ---------------- USERS (LOGIN) ----------------
+UPLOAD_FOLDER = "uploads"
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+# ---------------- USERS ----------------
 USERS = {
-    "admin": "admin123",
-    "user1": "password1"
+    "student1": {"password": "stud123", "role": "student"},
+    "provider1": {"password": "prov123", "role": "provider"}
 }
 
-# ---------------- PROJECT/ROLE REQUIREMENTS ----------------
-ROLE_REQUIREMENTS = {
-    "AI Intern": {"Python": 0.35, "Machine Learning": 0.40, "Statistics": 0.25},
-    "Web Developer": {"HTML": 0.30, "CSS": 0.30, "JavaScript": 0.40},
-    "Data Analyst": {"Python": 0.40, "SQL": 0.30, "Statistics": 0.30}
-}
+# ---------------- STORAGE ----------------
+INTERNSHIPS = []
+STUDENT_APPLICATIONS = []
 
-# ---------------- LOGIN PAGE ----------------
-LOGIN_PAGE = """
-<!DOCTYPE html>
-<html>
-<head>
-<title>Login - Internship Platform</title>
-<style>
-body {
-    font-family: 'Segoe UI', sans-serif;
-    display:flex;
-    justify-content:center;
-    align-items:center;
-    min-height:100vh;
-    background: linear-gradient(135deg, #a1c4fd, #c2e9fb); /* soft blue gradient */
-}
-.container {
-    background:white;
-    padding:30px;
-    border-radius:12px;
-    box-shadow:0 6px 20px rgba(0,0,0,0.15);
-    width:360px;
-}
-input {
-    width:100%;
-    padding:10px;
-    margin:8px 0;
-    border-radius:6px;
-    border:1px solid #ccc;
-}
-button {
-    width:100%;
-    padding:12px;
-    background:#ff6fa3; /* pink button */
-    color:white;
-    border:none;
-    border-radius:8px;
-    font-weight:bold;
-}
-button:hover {
-    background:#ff4d87;
-    cursor:pointer;
-}
-.error {
-    color:red;
-    text-align:center;
-}
-h2 {
-    color:#2c3e50;
-    text-align:center;
-}
-</style>
-</head>
-<body>
-<div class="container">
-<h2>Login to Internship Platform</h2>
-<form method="POST">
-<input type="text" name="username" placeholder="Username" required autofocus>
-<input type="password" name="password" placeholder="Password" required>
-<div class="error">{{error}}</div>
-<button type="submit">Login</button>
-</form>
-</div>
-</body>
-</html>
-"""
-
-# ---------------- ROUTE: LOGIN ----------------
-@app.route("/", methods=["GET", "POST"])
-def login():
-    error = ""
-    if request.method == "POST":
-        username = request.form.get("username")
-        password = request.form.get("password")
-        if username in USERS and USERS[username] == password:
-            session["user"] = username
-            return redirect(url_for("home"))
-        else:
-            error = "Invalid username or password."
-    return render_template_string(LOGIN_PAGE, error=error)
-
-# ---------------- FAIRNESS-AWARE MATCH ENGINE ----------------
+# ---------------- MATCH ENGINE ----------------
 def normalize_score(score):
     return min(max(score, 20), 95)
 
-def calculate_match(form):
-    role = form.get("role")
-    role_skills = ROLE_REQUIREMENTS[role]
-    reasoning, contributions = [], []
-    weighted_sum, total_weight, matched_skills = 0, 0, 0
+def calculate_match(student_form, internship):
+    weighted_sum = 0
+    total_weight = 0
+    matched = 0
+    reasoning = []
+    contributions = []
 
-    for skill, weight in role_skills.items():
-        value = form.get(f"score_{skill}")
-        if not value:
-            score = 50
-            reasoning.append(f"{skill}: Missing → Neutral fairness score (50)")
-        else:
-            score = normalize_score(int(value))
-            reasoning.append(f"{skill}: Normalized score {score}/100 × weight {weight}")
-            matched_skills += 1
+    for skill, weight in internship["skills"].items():
+        val = student_form["skills"].get(skill)
+        score = normalize_score(val) if val is not None else 50
+        if val is not None:
+            matched += 1
         contribution = score * weight
         weighted_sum += contribution
         total_weight += weight
+        reasoning.append(f"{skill}: {score}/100 × {round(weight,2)}")
         contributions.append((skill, round(contribution,2)))
 
-    competency_score = weighted_sum / total_weight
-    coverage_score = (matched_skills / len(role_skills)) * 100
-    final_score = round(0.7 * competency_score + 0.3 * coverage_score, 2)
+    competency = weighted_sum / total_weight if total_weight else 0
+    coverage = (matched / len(internship["skills"])) * 100 if internship["skills"] else 0
+    cgpa_score = (student_form["cgpa"] / 10) * 100
 
-    reasoning.append(f"Competency Score = {round(competency_score,2)}")
-    reasoning.append(f"Skill Coverage Score = {round(coverage_score,2)}")
-    reasoning.append("Final Score = 0.7×Competency + 0.3×Coverage (Fairness-aware evaluation)")
+    final = round(0.5*competency + 0.3*coverage + 0.2*cgpa_score,2)
+    summary = "Excellent Match" if final>=80 else "Good Match" if final>=60 else "Partial Match"
+    return final, reasoning, contributions, summary
 
-    if final_score >= 80:
-        summary = "Excellent and equitable alignment with role requirements."
-    elif final_score >= 60:
-        summary = "Good match with fair competency balance."
-    else:
-        summary = "Partial alignment. Skill improvement recommended."
-
-    return final_score, reasoning, contributions, summary
-
-# ---------------- MAIN PLATFORM ----------------
-PLATFORM_PAGE = """ 
-<!DOCTYPE html>
-<html>
-<head>
-<title>Internship Matching Platform</title>
+# ---------------- BASE STYLE ----------------
+BASE_STYLE = """
 <style>
-body {
-    font-family:'Segoe UI', sans-serif;
-    background: linear-gradient(135deg, #a1c4fd, #c2e9fb); /* soft blue gradient */
-    display:flex;
-    justify-content:center;
-    align-items:center;
-    min-height:100vh;
+body{
+margin:0;
+font-family:'Segoe UI';
+background:#a8d0e6;
+display:flex;
+justify-content:center;
+align-items:center;
+min-height:100vh;
 }
-.container {
-    width:620px;
-    background:white;
-    padding:30px;
-    border-radius:12px;
-    box-shadow:0 6px 20px rgba(0,0,0,0.15);
+.container{
+background:rgba(255,255,255,0.95);
+padding:50px 40px;
+border-radius:20px;
+box-shadow:0 20px 40px rgba(0,0,0,0.3);
+width:600px;
+max-height:90vh;
+overflow-y:auto;
+text-align:center;
 }
-input,select {
-    width:100%;
-    padding:10px;
-    margin:8px 0;
-    border-radius:6px;
-    border:1px solid #ccc;
+input,textarea,select{
+width:95%;
+display:block;
+padding:10px;
+margin:10px auto;
+border-radius:10px;
+border:1px solid #ccc;
+font-size:15px;
 }
-button {
-    width:100%;
-    padding:12px;
-    background:#ff6fa3; /* pink button */
-    color:white;
-    border:none;
-    border-radius:8px;
-    font-weight:bold;
+button{
+padding:12px 20px;
+border:none;
+border-radius:12px;
+background:#0066ff;
+color:white;
+font-weight:bold;
+cursor:pointer;
 }
-button:hover {
-    background:#ff4d87;
-    cursor:pointer;
+button:hover{
+background:#004dcc;
 }
-.hidden {display:none;}
-.box {
-    background:#f4f4f4;
-    padding:10px;
-    margin-top:8px;
-    border-radius:8px;
+.card{
+background:#f2f2f2;
+padding:8px;
+margin:6px 0;
+border-radius:8px;
+text-align:left;
 }
-h2,h3 {color:#2c3e50;}
+a{color:#0066ff;text-decoration:none;}
+a:hover{text-decoration:underline;}
+label{
+display:block;
+margin-top:10px;
+font-weight:bold;
+}
 </style>
-</head>
-<body>
+"""
+
+# ---------------- LOGIN ----------------
+LOGIN_PAGE = BASE_STYLE + """
 <div class="container">
-{% if not score %}
-<div id="step1">
-<h2>Step 1 — Basic Details</h2>
-<input id="name" placeholder="Name">
-<input id="email" placeholder="Email">
-<input id="college" placeholder="College">
-<input id="mobile" placeholder="Mobile">
-<select id="role">
-<option value="">Select Role</option>
+<h2>Login</h2>
+<form method="POST">
+<input name="username" placeholder="Username" required>
+<input name="password" type="password" placeholder="Password" required>
+<div style="color:red">{{error}}</div>
+<button>Login</button>
+</form>
+</div>
+"""
+
+@app.route("/", methods=["GET","POST"])
+def login():
+    error=""
+    if request.method=="POST":
+        u=request.form["username"]
+        p=request.form["password"]
+        if u in USERS and USERS[u]["password"]==p:
+            session["user"]=u
+            session["role"]=USERS[u]["role"]
+            return redirect("/dashboard")
+        error="Invalid Credentials"
+    return render_template_string(LOGIN_PAGE,error=error)
+
+# ---------------- DASHBOARD ----------------
+@app.route("/dashboard")
+def dashboard():
+    if "user" not in session:
+        return redirect("/")
+    html = BASE_STYLE + f"<div class='container'><h2>Welcome {session['user']} ({session['role']})</h2>"
+    if session["role"]=="student":
+        html += "<a href='/student_form'>Apply Internship</a><br><br>"
+        html += "<a href='/student_applications'>My Applications</a><br><br>"
+    else:
+        html += "<a href='/provider_form'>Create Internship</a><br><br>"
+        html += "<a href='/view_applicants'>View Applicants</a><br><br>"
+    html += "<a href='/logout'>Logout</a></div>"
+    return html
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect("/")
+
+# ---------------- PROVIDER FORM ----------------
+PROVIDER_PAGE = BASE_STYLE + """
+<div class="container">
+<h2>Create Internship</h2>
+<form method="POST">
+<input name="title" placeholder="Internship Title" required>
+<select name="type" required>
 <option>AI Intern</option>
 <option>Web Developer</option>
 <option>Data Analyst</option>
+<option>ML Intern</option>
+<option>Other</option>
 </select>
-<button onclick="goStep2()">Continue</button>
-</div>
+<input name="duration" type="number" placeholder="Duration (weeks)" required>
+<input name="stipend" type="number" step="0.01" placeholder="Stipend">
+<input name="cgpa_cutoff" type="number" step="0.01" placeholder="CGPA Cutoff" required>
 
-<form method="POST">
-<div id="step2" class="hidden">
-<h2>Step 2 — Skill Scores</h2>
-<div id="skillsArea"></div>
-<input type="hidden" name="role" id="role_hidden">
-<button>Generate Fair Match Score</button>
-</div>
+<h4>Skills</h4>
+<div id="skillsContainer"></div>
+<button type="button" onclick="addSkill()">Add Skill</button><br><br>
+
+<button>Create</button>
 </form>
-{% endif %}
 
-{% if score %}
-<h2>Step 3 — Fair Explainable Result</h2>
-<h3>Match Score: {{score}}%</h3>
-<div class="box"><b>{{summary}}</b></div>
-<h3>Reasoning</h3>
-{% for r in reasoning %}
-<div class="box">{{r}}</div>
-{% endfor %}
-<h3>Contributions</h3>
-{% for s,c in contributions %}
-<div class="box">{{s}} → {{c}}</div>
-{% endfor %}
-
-<form action="{{ url_for('logout') }}" method="GET">
-<button>New Application</button>
-</form>
-{% endif %}
-
-</div>
 <script>
-const roleSkills={"AI Intern":["Python","Machine Learning","Statistics"],"Web Developer":["HTML","CSS","JavaScript"],"Data Analyst":["Python","SQL","Statistics"]};
-function goStep2(){
-    let role=document.getElementById("role").value;
-    if(!role){
-        alert("Please select a role before continuing.");
-        return;
-    }
-    document.getElementById("role_hidden").value=role;
-    let skills=roleSkills[role];
-    let area=document.getElementById("skillsArea");
-    area.innerHTML="";
-    skills.forEach(skill=>{
-        let label=document.createElement("label");
-        label.innerText=skill+" score (1-100)";
-        let input=document.createElement("input");
-        input.type="number"; input.name="score_"+skill; input.min=1; input.max=100;
-        area.appendChild(label); area.appendChild(input);
-    });
-    document.getElementById("step1").classList.add("hidden");
-    document.getElementById("step2").classList.remove("hidden");
+function addSkill(){
+let div=document.createElement("div");
+div.innerHTML="Skill: <input name='skill_name[]' required> Weight: <input name='skill_weight[]' required><br>";
+document.getElementById("skillsContainer").appendChild(div);
 }
 </script>
-</body>
-</html>
+</div>
 """
 
-# ---------------- ROUTE: HOME ----------------
-@app.route("/home", methods=["GET","POST"])
-def home():
-    if "user" not in session:
-        return redirect(url_for("login"))
+@app.route("/provider_form", methods=["GET","POST"])
+def provider_form():
+    if session.get("role")!="provider":
+        return redirect("/")
+    if request.method=="POST":
+        names=request.form.getlist("skill_name[]")
+        weights=request.form.getlist("skill_weight[]")
+        skills={n:float(w) for n,w in zip(names,weights)}
+        total=sum(skills.values())
+        for k in skills:
+            skills[k]/=total
+        INTERNSHIPS.append({
+            "title":request.form["title"],
+            "type":request.form["type"],
+            "duration":int(request.form["duration"]),
+            "stipend":float(request.form.get("stipend",0)),
+            "cgpa_cutoff":float(request.form["cgpa_cutoff"]),
+            "skills":skills
+        })
+        return redirect("/dashboard")
+    return render_template_string(PROVIDER_PAGE)
 
-    score, reasoning, contributions, summary = None, None, None, None
-    if request.method == "POST":
-        score, reasoning, contributions, summary = calculate_match(request.form)
-    return render_template_string(
-        PLATFORM_PAGE,
-        score=score,
-        reasoning=reasoning,
-        contributions=contributions,
-        summary=summary
-    )
+# ---------------- STUDENT FORM ----------------
+STUDENT_PAGE = BASE_STYLE + """
+<div class="container">
+<h2>Apply Internship</h2>
+<form method="POST" enctype="multipart/form-data">
 
-# ---------------- LOGOUT ----------------
-@app.route("/logout")
-def logout():
-    session.pop("user", None)
-    return redirect(url_for("login"))
+<label for="name">Full Name:</label>
+<input type="text" id="name" name="name" placeholder="Full Name" required>
+
+<input name="cgpa" type="number" step="0.01" placeholder="CGPA" required>
+<input name="projects" placeholder="Projects / Achievements">
+
+<h4>Select Internship</h4>
+<select name="internship_idx" required>
+{% for internship in internships %}
+<option value="{{ loop.index0 }}">
+{{ internship['title'] }} - Duration: {{ internship['duration'] }} weeks, Stipend: {{ internship['stipend'] }}, CGPA Cutoff: {{ internship['cgpa_cutoff'] }}
+</option>
+{% endfor %}
+</select>
+
+<h4>Skills</h4>
+{% for skill in all_skills %}
+<input type="number" name="skill_{{skill}}" placeholder="{{skill}}" required>
+{% endfor %}
+
+<h4>Resume (Upload File)</h4>
+<input type="file" name="resume" required>
+
+<h4>Cover Letter</h4>
+<textarea name="cover_letter" placeholder="Write your cover letter here..." rows="5" required></textarea>
+
+<button>Submit</button>
+</form>
+</div>
+"""
+
+@app.route("/student_form", methods=["GET","POST"])
+def student_form():
+    if session.get("role")!="student":
+        return redirect("/")
+    if not INTERNSHIPS:
+        return BASE_STYLE + "<div class='container'>No internships yet</div>"
+
+    all_skills = list({s for i in INTERNSHIPS for s in i["skills"]})
+
+    if request.method=="POST":
+        name = request.form.get("name")
+        skills = {s:int(request.form[f"skill_{s}"]) for s in all_skills}
+        cgpa = float(request.form["cgpa"])
+        idx = int(request.form["internship_idx"])
+        internship = INTERNSHIPS[idx]
+
+        resume = request.files["resume"]
+        resume_path = os.path.join(UPLOAD_FOLDER, secure_filename(resume.filename))
+        resume.save(resume_path)
+
+        cover_letter_text = request.form["cover_letter"]
+
+        student = {
+            "name": name,
+            "skills": skills,
+            "cgpa": cgpa,
+            "resume": resume_path,
+            "cover_letter": cover_letter_text,
+            "projects": request.form.get("projects","")
+        }
+
+        score, reason, contri, summary = calculate_match(student, internship)
+        STUDENT_APPLICATIONS.append({
+            "student": student,
+            "internship_title": internship["title"],
+            "score": score,
+            "reasoning": reason,
+            "contributions": contri,
+            "summary": summary,
+            "selected": None
+        })
+
+        output = BASE_STYLE + "<div class='container'>"
+        output += f"<h2>{summary}</h2><h3>Score: {score}%</h3>"
+        output += "<h4>Reasoning:</h4>"
+        for r in reason: output+=f"<div class='card'>{r}</div>"
+        output += "<h4>Skill Contributions:</h4>"
+        for s,c in contri: output+=f"<div class='card'>{s} → {c}</div>"
+        output += "<br><a href='/student_applications'>View My Applications</a>"
+        output += "<br><a href='/student_form'>Submit Another Response</a>"
+        output += "</div>"
+        return output
+
+    return render_template_string(STUDENT_PAGE, internships=INTERNSHIPS, all_skills=all_skills)
+
+# ---------------- STUDENT APPLICATION STATUS ----------------
+@app.route("/student_applications")
+def student_applications():
+    if session.get("role")!="student":
+        return redirect("/")
+    html = BASE_STYLE + "<div class='container'><h2>My Applications</h2>"
+    for app in STUDENT_APPLICATIONS:
+        html += f"<b>{app['student']['name']}</b> applied for {app['internship_title']}<br>"
+        html += f"CGPA: {app['student']['cgpa']}<br>"
+        html += f"Projects: {app['student'].get('projects','')}<br>"
+        html += f"Score: {app['score']}%<br>"
+        status = app['selected']
+        html += f"Status: {'Pending' if status is None else ('Selected' if status else 'Rejected')}<br><hr>"
+    html += "<a href='/dashboard'>Back</a></div>"
+    return html
+
+# ---------------- VIEW APPLICANTS FOR PROVIDER ----------------
+@app.route("/view_applicants")
+def view_applicants():
+    if session.get("role")!="provider":
+        return redirect("/")
+    html = BASE_STYLE + "<div class='container'><h2>Applicants</h2>"
+    for idx, a in enumerate(STUDENT_APPLICATIONS):
+        html += f"<b>{a['student'].get('name','Unknown')}</b> applied for {a['internship_title']}<br>"
+        html += f"CGPA: {a['student']['cgpa']}, Score: {a['score']}%<br>"
+        html += f"Projects: {a['student'].get('projects','')}<br>"
+        html += f"<b>Summary:</b> {a['summary']}<br>"
+        status = a['selected']
+        html += f"Status: {'Pending' if status is None else ('Selected' if status else 'Rejected')}<br>"
+        html += f"<a href='/select/{idx}'>Select</a> | <a href='/reject/{idx}'>Reject</a><hr>"
+    html += "<a href='/dashboard'>Back</a></div>"
+    return html
+
+@app.route("/select/<int:idx>")
+def select(idx):
+    if idx<len(STUDENT_APPLICATIONS): STUDENT_APPLICATIONS[idx]["selected"]=True
+    return redirect("/view_applicants")
+
+@app.route("/reject/<int:idx>")
+def reject(idx):
+    if idx<len(STUDENT_APPLICATIONS): STUDENT_APPLICATIONS[idx]["selected"]=False
+    return redirect("/view_applicants")
 
 # ---------------- RUN ----------------
-if __name__ == "__main__":
+if __name__=="__main__":
     app.run(debug=True)
